@@ -22,6 +22,9 @@ struct FavoritesView: View {
         }
         .navigationTitle("Favorites")
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) { SettingsMenu() }
+        }
+        .toolbar {
             if !library.favorites.isEmpty {
                 Button(isEditing ? "Done" : "Edit") {
                     withAnimation { isEditing.toggle() }

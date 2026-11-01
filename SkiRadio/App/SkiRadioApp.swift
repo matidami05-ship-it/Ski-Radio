@@ -21,6 +21,7 @@ enum AppTab: Hashable {
 
 struct ContentView: View {
     @EnvironmentObject private var library: Library
+    @EnvironmentObject private var player: RadioPlayer
     @State private var tab: AppTab = .favorites
     @State private var pickedStartTab = false
 
@@ -30,6 +31,7 @@ struct ContentView: View {
             guard !pickedStartTab else { return }
             pickedStartTab = true
             if library.favorites.isEmpty { tab = .discover }
+            player.autoplayLastStationIfNeeded()
         }
     }
 

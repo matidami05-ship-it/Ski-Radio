@@ -71,6 +71,9 @@ struct DiscoverView: View {
             .padding(.vertical)
         }
         .navigationTitle("Ski Radio")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) { SettingsMenu() }
+        }
         .navigationDestination(for: BrowseDestination.self) { destination in
             switch destination {
             case .genre(let genre):

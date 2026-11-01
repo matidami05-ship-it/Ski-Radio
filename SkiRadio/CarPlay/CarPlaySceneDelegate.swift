@@ -58,6 +58,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         refresh()
         loadPopular()
+
+        // Opening the app in the car also resumes the last station.
+        player.autoplayLastStationIfNeeded()
+        if player.station != nil { showNowPlaying() }
     }
 
     func templateApplicationScene(

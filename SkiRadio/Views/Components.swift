@@ -232,6 +232,22 @@ struct MessageView: View {
     }
 }
 
+/// Gear menu with app settings.
+struct SettingsMenu: View {
+    @AppStorage(RadioPlayer.autoplayKey) private var autoplay = true
+
+    var body: some View {
+        Menu {
+            Toggle(isOn: $autoplay) {
+                Label("Auto-play last station", systemImage: "play.circle")
+            }
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .accessibilityLabel("Settings")
+    }
+}
+
 /// AirPlay / Bluetooth output picker.
 struct RoutePicker: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView {

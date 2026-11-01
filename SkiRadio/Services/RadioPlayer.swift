@@ -95,6 +95,26 @@ final class RadioPlayer: NSObject, ObservableObject {
         Task { await RadioBrowser.shared.registerClick(station) }
     }
 
+    // MARK: - Auto-play
+
+    static let autoplayKey = "autoplayLastStation"
+    private var didAttemptAutoplay = false
+
+    /// Starts the most recently played station once per app launch (phone or CarPlay, whichever opens first).
+    /// Does nothing if the setting is off, nothing has been played yet, or something is already playing.
+    func autoplayLastStationIfNeeded() {
+        guard !didAttemptAutoplay else { return }
+        didAttemptAutoplay = true
+
+        let enabled = UserDefaults.standard.object(forKey: Self.autoplayKey) as? Bool ?? true
+        let library = Library.shared
+        guard enabled, station == nil, let last = library.recents.first else { return }
+
+        // Skip buttons move through your favorites if it's one of them, otherwise through recents.
+        let list = library.isFavorite(last) ? library.favorites : library.recents
+        play(last, from: list)
+    }
+
     func togglePlayPause() {
         isPlaying ? pause() : resume()
     }
