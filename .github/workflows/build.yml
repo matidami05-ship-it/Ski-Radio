@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -36,3 +39,15 @@ jobs:
         with:
           name: SkiRadio-unsigned-ipa
           path: SkiRadio-unsigned.ipa
+
+      # A Release gives a direct download link that works on a phone.
+      - name: Publish to the "latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest SkiRadio-unsigned.ipa \
+            --title "Ski Radio (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7}. Unsigned: install with Sideloadly or AltStore." \
+            --latest
