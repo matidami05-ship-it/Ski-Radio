@@ -232,19 +232,18 @@ struct MessageView: View {
     }
 }
 
-/// Gear menu with app settings.
+/// Gear button that opens Settings.
 struct SettingsMenu: View {
-    @AppStorage(RadioPlayer.autoplayKey) private var autoplay = true
+    @State private var showSettings = false
 
     var body: some View {
-        Menu {
-            Toggle(isOn: $autoplay) {
-                Label("Auto-play last station", systemImage: "play.circle")
-            }
+        Button {
+            showSettings = true
         } label: {
             Image(systemName: "gearshape")
         }
         .accessibilityLabel("Settings")
+        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 }
 

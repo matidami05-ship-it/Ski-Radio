@@ -45,6 +45,8 @@ final class RadioPlayer: NSObject, ObservableObject {
         configureRemoteCommands()
         observePlayer()
         observeInterruptions()
+        observeRouteChanges()
+        _ = Equalizer.shared
     }
 
     // MARK: - Playback
@@ -78,12 +80,19 @@ final class RadioPlayer: NSObject, ObservableObject {
         item.add(metadataOutput)
 
         itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
-            let failed = item.status == .failed
+            let itemStatus = item.status
             let message = item.error?.localizedDescription
             Task { @MainActor [weak self] in
-                guard let self, failed, self.player.currentItem === item else { return }
-                self.status = .failed(message ?? "Couldn't play this station.")
-                self.updateNowPlaying()
+                guard let self, self.player.currentItem === item else { return }
+                switch itemStatus {
+                case .failed:
+                    self.status = .failed(message ?? "Couldn't play this station.")
+                    self.updateNowPlaying()
+                case .readyToPlay:
+                    self.attachEqualizer(to: item)
+                default:
+                    break
+                }
             }
         }
 
@@ -95,10 +104,81 @@ final class RadioPlayer: NSObject, ObservableObject {
         Task { await RadioBrowser.shared.registerClick(station) }
     }
 
+    // MARK: - Equalizer
+
+    /// When the current stream started actually playing (used by the EQ screen).
+    @Published private(set) var playingSince: Date?
+
+    private func attachEqualizer(to item: AVPlayerItem) {
+        guard item.audioMix == nil,
+              let track = item.tracks.compactMap(\.assetTrack).first(where: { $0.mediaType == .audio }),
+              let mix = EqualizerTap.audioMix(for: track) else { return }
+        item.audioMix = mix
+    }
+
+    // MARK: - Sleep timer
+
+    @Published private(set) var sleepEndsAt: Date?
+    private var sleepTask: Task<Void, Never>?
+
+    /// Pauses after the given number of minutes; nil turns the timer off.
+    func setSleepTimer(minutes: Int?) {
+        sleepTask?.cancel()
+        sleepTask = nil
+        guard let minutes, minutes > 0 else {
+            sleepEndsAt = nil
+            return
+        }
+        sleepEndsAt = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(minutes) * 60 * 1_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.pause()
+            self.sleepEndsAt = nil
+        }
+    }
+
+    // MARK: - Bluetooth auto-play
+
+    private var routeObserver: NSObjectProtocol?
+
+    private func observeRouteChanges() {
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+            let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
+            Task { @MainActor [weak self] in
+                guard reason == .newDeviceAvailable else { return }
+                self?.handleNewAudioDevice()
+            }
+        }
+    }
+
+    private func handleNewAudioDevice() {
+        guard !isPlaying,
+              let saved = AudioDevice.autoplayDevice,
+              AudioDevice.currentOutputs.contains(where: { $0.matches(saved) }) else { return }
+        playMostRecent()
+    }
+
     // MARK: - Auto-play
 
     static let autoplayKey = "autoplayLastStation"
     private var didAttemptAutoplay = false
+
+    /// Plays the most recently played station. Returns false if nothing has been played yet.
+    @discardableResult
+    func playMostRecent() -> Bool {
+        didAttemptAutoplay = true
+        let library = Library.shared
+        guard let last = library.recents.first else { return false }
+        let list = library.isFavorite(last) ? library.favorites : library.recents
+        play(last, from: list)
+        return true
+    }
 
     /// Starts the most recently played station once per app launch (phone or CarPlay, whichever opens first).
     /// Does nothing if the setting is off, nothing has been played yet, or something is already playing.
@@ -158,7 +238,11 @@ final class RadioPlayer: NSObject, ObservableObject {
                 guard let self else { return }
                 switch control {
                 case .playing:
+                    if self.status != .playing { self.playingSince = Date() }
                     self.status = .playing
+                case .paused:
+                    // The system paused us (e.g. headphones unplugged).
+                    if self.status == .playing { self.status = .paused }
                 case .waitingToPlayAtSpecifiedRate:
                     if self.status == .playing { self.status = .loading }
                 default:

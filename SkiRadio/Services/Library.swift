@@ -45,6 +45,10 @@ final class Library: ObservableObject {
         favorites.move(fromOffsets: source, toOffset: destination)
     }
 
+    func clearRecents() {
+        recents = []
+    }
+
     func addRecent(_ station: Station) {
         var updated = recents.filter { $0.id != station.id }
         updated.insert(station, at: 0)

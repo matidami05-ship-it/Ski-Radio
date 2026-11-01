@@ -3,6 +3,8 @@ import SwiftUI
 struct NowPlayingView: View {
     @EnvironmentObject private var player: RadioPlayer
     @EnvironmentObject private var library: Library
+    @ObservedObject private var equalizer = Equalizer.shared
+    @State private var showEqualizer = false
 
     var body: some View {
         VStack(spacing: 28) {
@@ -53,7 +55,7 @@ struct NowPlayingView: View {
                 }
                 .buttonStyle(.plain)
 
-                HStack(spacing: 48) {
+                HStack(spacing: 36) {
                     Button {
                         library.toggleFavorite(station)
                     } label: {
@@ -62,8 +64,33 @@ struct NowPlayingView: View {
                             .foregroundStyle(.pink)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Favorite")
+
+                    Button {
+                        showEqualizer = true
+                    } label: {
+                        Image(systemName: "slider.vertical.3")
+                            .font(.title2)
+                            .foregroundStyle(equalizer.enabled ? Color.orange : Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Equalizer")
+
+                    SleepTimerButton()
+
                     RoutePicker()
                         .frame(width: 44, height: 44)
+                }
+                .sheet(isPresented: $showEqualizer) {
+                    NavigationStack {
+                        EqualizerView()
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { showEqualizer = false }
+                                }
+                            }
+                    }
+                    .presentationDetents([.medium, .large])
                 }
             } else {
                 MessageView(symbol: "radio", title: "Nothing playing")
