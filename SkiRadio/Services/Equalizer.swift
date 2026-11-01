@@ -268,9 +268,9 @@ enum EqualizerTap {
             }
         )
 
-        var tap: MTAudioProcessingTap?
-        let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap)
-        guard status == noErr, let tap else {
+        var unmanagedTap: Unmanaged<MTAudioProcessingTap>?
+        let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &unmanagedTap)
+        guard status == noErr, let tap = unmanagedTap?.takeRetainedValue() else {
             Unmanaged<EQProcessor>.fromOpaque(client).release()
             return nil
         }

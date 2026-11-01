@@ -32,7 +32,7 @@ struct FavoritesView: View {
                 .fontWeight(isEditing ? .semibold : .regular)
             }
         }
-        .onChange(of: library.favorites.isEmpty) { empty in
+        .onChange(of: library.favorites.isEmpty) { _, empty in
             if empty { isEditing = false }
         }
     }
