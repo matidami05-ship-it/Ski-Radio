@@ -18,7 +18,13 @@ final class RadioPlayer: NSObject, ObservableObject {
     @Published private(set) var station: Station?
     @Published private(set) var status: Status = .idle
     @Published private(set) var trackTitle: String?
+    /// Station logo (or a generated monogram if the station has none).
     @Published private(set) var artwork: UIImage?
+    /// Cover art for the song currently on air, when it can be found.
+    @Published private(set) var albumArt: UIImage?
+    @Published private(set) var albumArtURL: URL?
+
+    var song: SongInfo? { trackTitle.map(SongInfo.init(streamTitle:)) }
 
     /// The list the current station was started from; next/previous move through it.
     private(set) var queue: [Station] = []
@@ -28,6 +34,7 @@ final class RadioPlayer: NSObject, ObservableObject {
     private var timeControlObservation: NSKeyValueObservation?
     private var interruptionObserver: NSObjectProtocol?
     private var artworkTask: Task<Void, Never>?
+    private var albumArtTask: Task<Void, Never>?
     private var resumeAfterInterruption = false
 
     var isPlaying: Bool { status == .playing || status == .loading }
@@ -52,7 +59,7 @@ final class RadioPlayer: NSObject, ObservableObject {
         let isNewStation = self.station?.id != station.id
         self.station = station
         if isNewStation {
-            trackTitle = nil
+            setTrackTitle(nil)
             loadArtwork(for: station)
         }
 
@@ -212,11 +219,30 @@ final class RadioPlayer: NSObject, ObservableObject {
 
     private func loadArtwork(for station: Station) {
         artworkTask?.cancel()
-        artwork = nil
+        artwork = UIImage.monogram(for: station, side: 600)
         artworkTask = Task { [weak self] in
-            let image = await ImageCache.shared.image(for: station.artworkURL)
+            guard let image = await ImageCache.shared.image(for: station.artworkURL) else { return }
             guard !Task.isCancelled, let self, self.station?.id == station.id else { return }
             self.artwork = image
+            self.updateNowPlaying()
+        }
+    }
+
+    fileprivate func setTrackTitle(_ title: String?) {
+        guard title != trackTitle else { return }
+        trackTitle = title
+        albumArtTask?.cancel()
+        albumArt = nil
+        albumArtURL = nil
+        updateNowPlaying()
+
+        guard let song else { return }
+        albumArtTask = Task { [weak self] in
+            guard let url = await AlbumArt.shared.coverURL(for: song),
+                  let image = await ImageCache.shared.image(for: url) else { return }
+            guard !Task.isCancelled, let self, self.trackTitle == title else { return }
+            self.albumArtURL = url
+            self.albumArt = image
             self.updateNowPlaying()
         }
     }
@@ -228,14 +254,21 @@ final class RadioPlayer: NSObject, ObservableObject {
         }
 
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: trackTitle ?? station.displayName,
-            MPMediaItemPropertyArtist: trackTitle == nil ? station.subtitle : station.displayName,
             MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
             MPNowPlayingInfoPropertyPlaybackRate: status == .playing ? 1.0 : 0.0,
         ]
-        if let artwork {
-            info[MPMediaItemPropertyArtwork] = Self.makeArtwork(artwork)
+        if let song {
+            info[MPMediaItemPropertyTitle] = song.title
+            info[MPMediaItemPropertyArtist] = song.artist ?? station.displayName
+            info[MPMediaItemPropertyAlbumTitle] = station.displayName
+        } else {
+            info[MPMediaItemPropertyTitle] = station.displayName
+            info[MPMediaItemPropertyArtist] = station.subtitle
+        }
+        // Song cover first, then the station logo.
+        if let image = albumArt ?? artwork {
+            info[MPMediaItemPropertyArtwork] = Self.makeArtwork(image)
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
@@ -270,8 +303,7 @@ extension RadioPlayer: AVPlayerItemMetadataOutputPushDelegate {
             for item in candidates {
                 guard let value = try? await item.load(.stringValue),
                       let title = RadioPlayer.cleanTitle(value) else { continue }
-                self?.trackTitle = title
-                self?.updateNowPlaying()
+                self?.setTrackTitle(title)
                 return
             }
         }

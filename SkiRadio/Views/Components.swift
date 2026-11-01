@@ -1,26 +1,69 @@
 import AVKit
 import SwiftUI
 
+/// Station logo, falling back to a colored initials tile when there's no logo or it fails to load.
 struct StationArtwork: View {
-    let url: URL?
+    let station: Station
     var size: CGFloat = 48
 
     var body: some View {
-        AsyncImage(url: url) { phase in
+        AsyncImage(url: station.artworkURL) { phase in
             if let image = phase.image {
                 image
                     .resizable()
                     .scaledToFit()
                     .padding(size * 0.08)
+                    .frame(width: size, height: size)
+                    .background(Color(.secondarySystemBackground))
             } else {
-                Image(systemName: "radio.fill")
-                    .font(.system(size: size * 0.4))
-                    .foregroundStyle(.orange)
+                monogram
             }
         }
         .frame(width: size, height: size)
-        .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+
+    private var monogram: some View {
+        let color = Color(Monogram.color(for: station.displayName))
+        return ZStack {
+            LinearGradient(colors: [color.opacity(0.75), color], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(Monogram.initials(for: station.displayName))
+                .font(.system(size: size * 0.36, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .padding(size * 0.08)
+        }
+    }
+}
+
+/// Square cover art for the song on air, with the station logo as a fallback.
+struct NowPlayingArtwork: View {
+    let station: Station
+    let albumArt: UIImage?
+    var size: CGFloat = 260
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let albumArt {
+                Image(uiImage: albumArt)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.08, style: .continuous))
+                    .transition(.opacity)
+                // Small station logo badge so you still know what's playing.
+                StationArtwork(station: station, size: size * 0.24)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: size * 0.24 * 0.22, style: .continuous)
+                            .stroke(Color(.systemBackground), lineWidth: 3)
+                    }
+                    .offset(x: 8, y: 8)
+            } else {
+                StationArtwork(station: station, size: size)
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: albumArt)
     }
 }
 
@@ -40,7 +83,7 @@ struct StationRow: View {
                 player.play(station, from: list)
             } label: {
                 HStack(spacing: 12) {
-                    StationArtwork(url: station.artworkURL, size: 48)
+                    StationArtwork(station: station, size: 48)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(station.displayName)
                             .font(.body.weight(.medium))
@@ -117,7 +160,17 @@ struct MiniPlayer: View {
     var body: some View {
         if let station = player.station {
             HStack(spacing: 12) {
-                StationArtwork(url: station.artworkURL, size: 44)
+                Group {
+                    if let albumArt = player.albumArt {
+                        Image(uiImage: albumArt)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 44 * 0.22, style: .continuous))
+                    } else {
+                        StationArtwork(station: station, size: 44)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(station.displayName)
                         .font(.subheadline.weight(.semibold))

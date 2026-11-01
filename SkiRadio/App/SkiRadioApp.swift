@@ -15,20 +15,40 @@ struct SkiRadioApp: App {
     }
 }
 
+enum AppTab: Hashable {
+    case favorites, discover, search
+}
+
 struct ContentView: View {
+    @EnvironmentObject private var library: Library
+    @State private var tab: AppTab = .favorites
+    @State private var pickedStartTab = false
+
     var body: some View {
-        TabView {
-            NavigationStack { DiscoverView() }
+        tabs.onAppear {
+            // Open straight to Favorites once you have some; otherwise start on Discover.
+            guard !pickedStartTab else { return }
+            pickedStartTab = true
+            if library.favorites.isEmpty { tab = .discover }
+        }
+    }
+
+    private var tabs: some View {
+        TabView(selection: $tab) {
+            NavigationStack { FavoritesView(tab: $tab) }
+                .miniPlayerInset()
+                .tabItem { Label("Favorites", systemImage: "heart.fill") }
+                .tag(AppTab.favorites)
+
+            NavigationStack { DiscoverView(tab: $tab) }
                 .miniPlayerInset()
                 .tabItem { Label("Discover", systemImage: "dot.radiowaves.left.and.right") }
+                .tag(AppTab.discover)
 
             NavigationStack { SearchView() }
                 .miniPlayerInset()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
-
-            NavigationStack { FavoritesView() }
-                .miniPlayerInset()
-                .tabItem { Label("Favorites", systemImage: "heart.fill") }
+                .tag(AppTab.search)
         }
     }
 }

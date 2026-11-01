@@ -6,10 +6,12 @@ Native iPhone internet radio with a full CarPlay interface. Stations come from t
 ## Features
 
 **iPhone**
-- Discover: recently played, 14 genres, popular stations in your country, top worldwide
+- Favorites tab first: big station tiles, tap to play or pause, Edit to reorder/delete
+- Discover: your favorites, recently played, 14 genres, popular in your country, top worldwide
 - Search by station name
-- Favorites (reorder and swipe to delete)
-- Now Playing: live song titles from the stream, LIVE badge, codec/bitrate, AirPlay picker
+- Station logos, with a colored initials tile for stations that have none
+- Now Playing: song title and artist from the stream, album art from the iTunes catalog,
+  LIVE badge, codec/bitrate, AirPlay picker
 - Plays in the background, with lock screen / Control Center controls and station logos
 - Next/previous skips through the list you started from
 - Pauses for calls and resumes after

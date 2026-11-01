@@ -6,6 +6,8 @@ enum BrowseDestination: Hashable {
 }
 
 struct DiscoverView: View {
+    @Binding var tab: AppTab
+
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var player: RadioPlayer
 
@@ -21,27 +23,22 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                if !library.favorites.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Your Favorites").font(.title3.bold())
+                            Spacer()
+                            Button("See All") { tab = .favorites }
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .padding(.horizontal)
+                        StationCarousel(stations: library.favorites)
+                    }
+                }
+
                 if !library.recents.isEmpty {
                     section("Recently Played") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 14) {
-                                ForEach(library.recents) { station in
-                                    Button {
-                                        player.play(station, from: library.recents)
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            StationArtwork(url: station.artworkURL, size: 96)
-                                            Text(station.displayName)
-                                                .font(.caption.weight(.medium))
-                                                .lineLimit(1)
-                                                .frame(width: 96, alignment: .leading)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
+                        StationCarousel(stations: library.recents)
                     }
                 }
 

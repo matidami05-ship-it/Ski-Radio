@@ -9,18 +9,36 @@ struct NowPlayingView: View {
             Spacer(minLength: 0)
 
             if let station = player.station {
-                StationArtwork(url: station.artworkURL, size: 260)
+                NowPlayingArtwork(station: station, albumArt: player.albumArt, size: 280)
                     .shadow(color: .black.opacity(0.25), radius: 20, y: 10)
 
-                VStack(spacing: 8) {
-                    Text(player.trackTitle ?? station.displayName)
-                        .font(.title2.bold())
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                    Text(player.trackTitle == nil ? station.subtitle : station.displayName)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                VStack(spacing: 6) {
+                    if let song = player.song {
+                        Text(song.title)
+                            .font(.title2.bold())
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                        if let artist = song.artist {
+                            Text(artist)
+                                .font(.title3)
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                        }
+                        Text(station.displayName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text(station.displayName)
+                            .font(.title2.bold())
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                        Text(station.subtitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     statusBadge(for: station)
+                        .padding(.top, 2)
                 }
                 .padding(.horizontal)
 

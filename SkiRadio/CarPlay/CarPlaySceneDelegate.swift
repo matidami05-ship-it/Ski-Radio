@@ -27,8 +27,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     )
     private lazy var genresTemplate = makeGenresTab()
 
-    private let placeholderImage = UIImage(systemName: "radio.fill")?
-        .withTintColor(.systemOrange, renderingMode: .alwaysOriginal)
+    private var monograms: [String: UIImage] = [:]
+
+    private func monogram(for station: Station) -> UIImage {
+        if let cached = monograms[station.id] { return cached }
+        let image = UIImage.monogram(for: station, side: CPListItem.maximumImageSize.width)
+        monograms[station.id] = image
+        return image
+    }
 
     // MARK: - Scene lifecycle
 
@@ -136,7 +142,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func items(for stations: [Station]) -> [CPListItem] {
         let limited = Array(stations.prefix(CPListTemplate.maximumItemCount))
         return limited.map { station in
-            let item = CPListItem(text: station.displayName, detailText: station.subtitle, image: placeholderImage)
+            let item = CPListItem(text: station.displayName, detailText: station.subtitle, image: monogram(for: station))
             item.isPlaying = player.station?.id == station.id && player.isPlaying
             item.playingIndicatorLocation = .trailing
             item.handler = { [weak self] _, completion in
