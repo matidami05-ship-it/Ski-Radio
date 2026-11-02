@@ -17,7 +17,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: SkiRadio
-        PRODUCT_BUNDLE_IDENTIFIER: com.ski.radio
+        PRODUCT_BUNDLE_IDENTIFIER: com.matidami05.skiradio
         INFOPLIST_FILE: Support/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Support/SkiRadio.entitlements

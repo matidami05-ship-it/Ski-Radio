@@ -1,0 +1,145 @@
+name: TestFlight
+
+# Signs Ski Radio with the CarPlay-enabled App Store profile and uploads it to TestFlight.
+# Signing files live encrypted in signing/ and are unlocked with the SIGNING_PASSPHRASE secret.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check signing setup
+        id: check
+        env:
+          PASS: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          missing=""
+          [ -n "$PASS" ] || missing="$missing SIGNING_PASSPHRASE-secret"
+          for f in dist_key.pem.gpg distribution.cer.gpg profile.mobileprovision.gpg AuthKey.p8.gpg asc.env; do
+            [ -f "signing/$f" ] || missing="$missing $f"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::TestFlight signing isn't set up yet. Missing:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Unlock signing files
+        if: steps.check.outputs.ready == 'true'
+        env:
+          PASS: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          which gpg || brew install gnupg
+          mkdir -p "$RUNNER_TEMP/sign"
+          for f in dist_key.pem distribution.cer profile.mobileprovision AuthKey.p8; do
+            gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASS" \
+              -d -o "$RUNNER_TEMP/sign/$f" "signing/$f.gpg"
+          done
+
+      - name: Install certificate and profile
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          S="$RUNNER_TEMP/sign"
+          KC="$RUNNER_TEMP/build.keychain-db"
+          KC_PASS="$(uuidgen)"
+          P12_PASS="$(uuidgen)"
+
+          # Apple's .cer is DER; build a .p12 with the system LibreSSL so `security` can read it.
+          /usr/bin/openssl x509 -inform DER -in "$S/distribution.cer" -out "$S/cert.pem" \
+            || cp "$S/distribution.cer" "$S/cert.pem"
+          /usr/bin/openssl pkcs12 -export -inkey "$S/dist_key.pem" -in "$S/cert.pem" \
+            -out "$S/dist.p12" -passout "pass:$P12_PASS"
+
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security import "$S/dist.p12" -k "$KC" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+
+          # Profile details.
+          security cms -D -i "$S/profile.mobileprovision" > "$S/profile.plist"
+          PB=/usr/libexec/PlistBuddy
+          UUID=$($PB -c "Print UUID" "$S/profile.plist")
+          TEAM=$($PB -c "Print TeamIdentifier:0" "$S/profile.plist")
+          APP_ID=$($PB -c "Print Entitlements:application-identifier" "$S/profile.plist")
+          BUNDLE_ID="${APP_ID#*.}"
+          echo "Profile: $($PB -c 'Print Name' "$S/profile.plist") ($UUID) for $BUNDLE_ID, team $TEAM"
+
+          if ! $PB -c "Print Entitlements:com.apple.developer.carplay-audio" "$S/profile.plist" > /dev/null 2>&1; then
+            echo "::error::This provisioning profile doesn't include the CarPlay Audio entitlement. Regenerate it and pick CarPlay under Additional Entitlements."
+            exit 1
+          fi
+
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$S/profile.mobileprovision" "$dir/$UUID.mobileprovision"
+          done
+
+          {
+            echo "PROFILE_UUID=$UUID"
+            echo "TEAM_ID=$TEAM"
+            echo "BUNDLE_ID=$BUNDLE_ID"
+            echo "KEYCHAIN=$KC"
+          } >> "$GITHUB_ENV"
+
+      - name: Archive
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project SkiRadio.xcodeproj -scheme SkiRadio \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath build/SkiRadio.xcarchive archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN"
+
+      - name: Export IPA
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_UUID</string></dict>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/SkiRadio.xcarchive \
+            -exportPath build/export -exportOptionsPlist build/ExportOptions.plist
+          ls -la build/export
+
+      - name: Upload to TestFlight
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          source signing/asc.env
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          cp "$RUNNER_TEMP/sign/AuthKey.p8" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun altool --upload-app -f build/export/SkiRadio.ipa -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Clean up
+        if: always()
+        run: |
+          [ -n "$KEYCHAIN" ] && security delete-keychain "$KEYCHAIN" || true
+          rm -rf "$RUNNER_TEMP/sign" "$HOME/.appstoreconnect"
