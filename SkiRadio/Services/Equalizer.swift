@@ -268,9 +268,16 @@ enum EqualizerTap {
             }
         )
 
+        // The iOS 26 SDK (Xcode 26 / Swift 6.2) returns a managed tap; older SDKs return Unmanaged.
+        #if compiler(>=6.2)
+        var createdTap: MTAudioProcessingTap?
+        let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &createdTap)
+        #else
         var unmanagedTap: Unmanaged<MTAudioProcessingTap>?
         let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &unmanagedTap)
-        guard status == noErr, let tap = unmanagedTap?.takeRetainedValue() else {
+        let createdTap = unmanagedTap?.takeRetainedValue()
+        #endif
+        guard status == noErr, let tap = createdTap else {
             Unmanaged<EQProcessor>.fromOpaque(client).release()
             return nil
         }
