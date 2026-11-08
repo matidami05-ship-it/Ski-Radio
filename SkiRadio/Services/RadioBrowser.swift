@@ -40,14 +40,44 @@ actor RadioBrowser {
         try await stations(path: "/json/stations/topclick/\(limit)", query: [:])
     }
 
-    func search(_ text: String, limit: Int = 60) async throws -> [Station] {
-        try await stations(path: "/json/stations/search", query: [
-            "name": text,
+    /// Searches by station name, optionally only within one country (ISO code like "PL").
+    func search(_ text: String, countryCode: String? = nil, limit: Int = 60) async throws -> [Station] {
+        var query = [
             "limit": "\(limit)",
             "order": "clickcount",
             "reverse": "true",
-        ])
+        ]
+        if !text.isEmpty { query["name"] = text }
+        if let countryCode { query["countrycode"] = countryCode }
+        return try await stations(path: "/json/stations/search", query: query)
     }
+
+    /// Every country in the directory with its station count, biggest first.
+    func countries() async throws -> [Country] {
+        if let cachedCountries { return cachedCountries }
+        struct Raw: Decodable {
+            let name: String
+            let iso_3166_1: String
+            let stationcount: Int
+        }
+        let data = try await data(path: "/json/countries", query: [:])
+        let raw = try JSONDecoder().decode([Raw].self, from: data)
+
+        // The directory can list a country more than once; merge by code.
+        var counts: [String: Int] = [:]
+        for entry in raw {
+            let code = entry.iso_3166_1.uppercased()
+            guard code.count == 2, entry.stationcount > 0 else { continue }
+            counts[code, default: 0] += entry.stationcount
+        }
+        let list = counts
+            .map { Country(code: $0.key, stationCount: $0.value) }
+            .sorted { $0.stationCount > $1.stationCount }
+        cachedCountries = list
+        return list
+    }
+
+    private var cachedCountries: [Country]?
 
     func stations(tag: String, limit: Int = 80) async throws -> [Station] {
         try await stations(path: "/json/stations/search", query: [

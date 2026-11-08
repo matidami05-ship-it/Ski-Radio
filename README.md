@@ -8,7 +8,7 @@ Native iPhone internet radio with a full CarPlay interface. Stations come from t
 **iPhone**
 - Favorites tab first: big station tiles, tap to play or pause, Edit to reorder/delete
 - Discover: your favorites, recently played, 14 genres, popular in your country, top worldwide
-- Search by station name
+- Search by station name, with a country filter (or pick a country to browse its top stations)
 - Opens playing your most recent station; can also start when a chosen Bluetooth device connects
 - Settings: 10-band equalizer with presets and preamp, sleep timer, auto-play options
 - Shortcuts / Siri actions: "Play Last Station" and "Pause Radio" (work with the app closed)
