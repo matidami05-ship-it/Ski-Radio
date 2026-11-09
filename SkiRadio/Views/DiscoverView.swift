@@ -3,6 +3,7 @@ import SwiftUI
 enum BrowseDestination: Hashable {
     case genre(Genre)
     case topWorldwide
+    case polish
 }
 
 struct DiscoverView: View {
@@ -40,6 +41,17 @@ struct DiscoverView: View {
                     section("Recently Played") {
                         StationCarousel(stations: library.recents)
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("🇵🇱 Polish Radio").font(.title3.bold())
+                        Spacer()
+                        NavigationLink("See All", value: BrowseDestination.polish)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .padding(.horizontal)
+                    StationCarousel(stations: BuiltInStations.all)
                 }
 
                 section("Genres") {
@@ -83,6 +95,10 @@ struct DiscoverView: View {
             case .topWorldwide:
                 StationListView(title: "Top Worldwide") {
                     try await RadioBrowser.shared.topStations()
+                }
+            case .polish:
+                StationListView(title: "Polish Radio") {
+                    try await RadioBrowser.shared.polishStations()
                 }
             }
         }

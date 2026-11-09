@@ -95,20 +95,33 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
             return item
         }
-        let template = CPListTemplate(title: "Genres", sections: [CPListSection(items: items)])
+        let flag = UIGraphicsImageRenderer(size: CGSize(width: 44, height: 44)).image { _ in
+            ("🇵🇱" as NSString).draw(at: CGPoint(x: 2, y: 2), withAttributes: [.font: UIFont.systemFont(ofSize: 36)])
+        }
+        let polish = CPListItem(text: "Polish Radio", detailText: "Chicago Polish stations and Poland's favorites", image: flag)
+        polish.accessoryType = .disclosureIndicator
+        polish.handler = { [weak self] _, completion in
+            self?.openList(title: "Polish Radio") { try await RadioBrowser.shared.polishStations() }
+            completion()
+        }
+        let template = CPListTemplate(title: "Genres", sections: [CPListSection(items: [polish]), CPListSection(items: items)])
         template.tabTitle = "Genres"
         template.tabImage = UIImage(systemName: "square.grid.2x2.fill")
         return template
     }
 
     private func openGenre(_ genre: Genre) {
-        let template = CPListTemplate(title: genre.name, sections: [])
+        openList(title: genre.name) { try await RadioBrowser.shared.stations(tag: genre.tag) }
+    }
+
+    private func openList(title: String, load: @escaping () async throws -> [Station]) {
+        let template = CPListTemplate(title: title, sections: [])
         template.emptyViewTitleVariants = ["Loading…"]
         interfaceController?.pushTemplate(template, animated: true, completion: nil)
 
         Task { [weak self, weak template] in
             do {
-                let stations = try await RadioBrowser.shared.stations(tag: genre.tag)
+                let stations = try await load()
                 guard let self, let template else { return }
                 if stations.isEmpty { template.emptyViewTitleVariants = ["No stations found"] }
                 template.updateSections([CPListSection(items: self.items(for: stations))])

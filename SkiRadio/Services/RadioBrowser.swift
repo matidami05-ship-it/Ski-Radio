@@ -49,7 +49,23 @@ actor RadioBrowser {
         ]
         if !text.isEmpty { query["name"] = text }
         if let countryCode { query["countrycode"] = countryCode }
-        return try await stations(path: "/json/stations/search", query: query)
+        let found = try await stations(path: "/json/stations/search", query: query)
+        return Self.merge(BuiltInStations.matching(text, countryCode: countryCode), found)
+    }
+
+    /// Polish radio: Chicago Polish stations first, then stations added by hand, then Poland's most popular.
+    func polishStations() async throws -> [Station] {
+        async let chicago = (try? stations(path: "/json/stations/search", query: [
+            "language": "polish", "countrycode": "US", "limit": "20", "order": "clickcount", "reverse": "true",
+        ])) ?? []
+        async let poland = stations(countryCode: "PL", limit: 150)
+        return Self.merge(BuiltInStations.polishChicago, await chicago, BuiltInStations.polishExtra, try await poland)
+    }
+
+    /// Joins lists, dropping repeats of the same station name.
+    private static func merge(_ lists: [Station]...) -> [Station] {
+        var seen = Set<String>()
+        return lists.joined().filter { seen.insert($0.displayName.lowercased()).inserted }
     }
 
     /// Every country in the directory with its station count, biggest first.
@@ -99,6 +115,7 @@ actor RadioBrowser {
 
     /// Radio Browser asks apps to report plays so popular stations rank correctly.
     func registerClick(_ station: Station) async {
+        guard !BuiltInStations.isBuiltIn(station) else { return }
         _ = try? await data(path: "/json/url/\(station.stationuuid)", query: [:])
     }
 
